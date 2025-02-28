@@ -16,9 +16,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Save Previous Commit
+      - name: Save Previous Commit (Handle First Commit Case)
         id: previous_commit
-        run: echo "PREV_COMMIT=$(git rev-parse HEAD^)" >> $GITHUB_ENV
+        run: |
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "PREV_COMMIT=$(git rev-parse HEAD^)" >> $GITHUB_ENV
+          else
+            echo "PREV_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_ENV  # Fallback to HEAD if no previous commit
+          fi
         
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -38,5 +43,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if [ "$PREV_COMMIT" = "$(git rev-parse HEAD)" ]; then
+            echo "First commit detected. Cannot revert."
+            exit 1
+          fi
+
           git reset --hard $PREV_COMMIT
-          git push --force https://x-access-token:$GH_PAT@github.com/${{ github.repository }}.git build
+          git push --force https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}.git build
