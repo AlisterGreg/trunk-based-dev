@@ -27,11 +27,12 @@ jobs:
       - name: Build Project
         run: dotnet build --configuration Release --no-restore
         
-      - name: Revert Changes on Failure
+      - name: Revert Push on Failure
         if: failure()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git revert --no-commit HEAD
-          git commit -m "Reverting commit $(git rev-parse --short HEAD^)"
-          git push origin build
+          git reset --hard $PREV_COMMIT
+          git push --force https://x-access-token:$GH_PAT@github.com/${{ github.repository }}.git build
