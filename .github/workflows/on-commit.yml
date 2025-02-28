@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.head_ref }}
+  cancel-in-progress: false # Can cause terraform to lock
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_TERRAFORM_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_TERRAFORM_SECRET_ACCESS_KEY }}
+
+  GITHUB_APP_ID: ${{ secrets.GH_CONFIGURATION_APP_ID }}
+  GITHUB_APP_INSTALLATION_ID: ${{ secrets.GH_CONFIGURATION_INSTALLATION_ID }}
+  GITHUB_APP_PEM_FILE: ${{ secrets.GH_CONFIGURATION_APP_PK }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Initialise Terraform
+        run: terraform init
+
+      - name: Validate Terraform
+        run: terraform validate
+
+      - name: Plan Terraform
+        id: plan
+        run: terraform plan -out=terraform.plan
+
+      - name: Show plan
+        run: terraform show -no-color -json terraform.plan > terraform.json
+
+      - uses: liatrio/terraform-change-pr-commenter@v1.7.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          json-file: terraform.json
+
+      - name: Archive Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform.plan
+          if-no-files-found: error
