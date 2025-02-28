@@ -1,58 +1,37 @@
-name: ci
+name: on-commit
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-
-permissions:
-  contents: read
-  pull-requests: write
-
-concurrency:
-  group: ci-${{ github.head_ref }}
-  cancel-in-progress: false # Can cause terraform to lock
-
-env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_TERRAFORM_ACCESS_KEY }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_TERRAFORM_SECRET_ACCESS_KEY }}
-
-  GITHUB_APP_ID: ${{ secrets.GH_CONFIGURATION_APP_ID }}
-  GITHUB_APP_INSTALLATION_ID: ${{ secrets.GH_CONFIGURATION_INSTALLATION_ID }}
-  GITHUB_APP_PEM_FILE: ${{ secrets.GH_CONFIGURATION_APP_PK }}
+      - build  # Change this if needed
 
 jobs:
-  plan:
+  build:
     runs-on: ubuntu-latest
+    concurrency:
+      group: on-commit  # Ensures only one build runs at a time
+      cancel-in-progress: false  # Prevents cancelling running builds
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
         with:
-          terraform_version: 1.9.8
+          dotnet-version: '8.0.x'  # Adjust this to your version
 
-      - name: Initialise Terraform
-        run: terraform init
+      - name: Restore Dependencies
+        run: dotnet restore
 
-      - name: Validate Terraform
-        run: terraform validate
-
-      - name: Plan Terraform
-        id: plan
-        run: terraform plan -out=terraform.plan
-
-      - name: Show plan
-        run: terraform show -no-color -json terraform.plan > terraform.json
-
-      - uses: liatrio/terraform-change-pr-commenter@v1.7.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          json-file: terraform.json
-
-      - name: Archive Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: terraform.plan
-          if-no-files-found: error
+      - name: Build Project
+        run: dotnet build --configuration Release --no-restore
+        
+      - name: Revert Changes on Failure
+        if: failure()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git revert --no-commit HEAD
+          git commit -m "Reverting commit $(git rev-parse --short HEAD^)"
+          git push origin main
