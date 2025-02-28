@@ -16,6 +16,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+     - name: Save Previous Commit
+        id: previous_commit
+        run: echo "PREV_COMMIT=$(git rev-parse HEAD^)" >> $GITHUB_ENV
+        
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
